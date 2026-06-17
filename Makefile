@@ -10,14 +10,33 @@
 #                                                                              #
 # **************************************************************************** #
 
+COMPOSE_FILE	= srcs/docker-compose.yml
+DATA_DIR		= /home/ssawa/data
+
+all: up
+
 up:
-	docker-compose up -d
+	mkdir -p $(DATA_DIR)/mariadb
+	mkdir -p $(DATA_DIR)/wordpress
+	docker compose -f $(COMPOSE_FILE) up -d --build
 
-clean:
-	docker-compose down
+down:
+	docker compose -f $(COMPOSE_FILE) down
 
-fclean:
-	docker system prune -a
-re:
+clean: down
+	docker compose -f $(COMPOSE_FILE) down --rmi all --volumes
 
-.PHONY: up clean
+fclean: clean
+	rm -rf $(DATA_DIR)/mariadb
+	rm -rf $(DATA_DIR)/wordpress
+	docker system prune -af
+
+re: fclean up
+
+logs:
+	docker compose -f $(COMPOSE_FILE) logs -f
+
+ps:
+	docker compose -f $(COMPOSE_FILE) ps
+
+.PHONY: all up down clean fclean re logs ps

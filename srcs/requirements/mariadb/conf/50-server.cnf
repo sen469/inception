@@ -1,0 +1,13 @@
+[mysqld]
+# デフォルトの 127.0.0.1 から 0.0.0.0 に変更
+# これにより、別コンテナ（wordpress）からの接続が可能になります。
+bind-address = 0.0.0.0
+
+# ポート番号（デフォルト3306）
+port = 3306
+
+# データ保存先（コンテナ内のパス）
+datadir = /var/lib/mysql
+
+# ソケットファイル
+socket = /run/mysqld/mysqld.sock
