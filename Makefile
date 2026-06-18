@@ -11,20 +11,20 @@
 # **************************************************************************** #
 
 COMPOSE_FILE	= srcs/docker-compose.yml
-+DATA_DIR       = /home/$(shell whoami)/data
+DATA_DIR       = /home/$(shell whoami)/data
 
 all: up
 
 up:
 	mkdir -p $(DATA_DIR)/mariadb
 	mkdir -p $(DATA_DIR)/wordpress
-	docker compose -f $(COMPOSE_FILE) up -d --build
+	USER_LOGIN=$(shell whoami) docker compose -f $(COMPOSE_FILE) up -d --build
 
 down:
-	docker compose -f $(COMPOSE_FILE) down
+	USER_LOGIN=$(shell whoami) docker compose -f $(COMPOSE_FILE) down
 
 clean: down
-	docker compose -f $(COMPOSE_FILE) down --rmi all --volumes
+	USER_LOGIN=$(shell whoami) docker compose -f $(COMPOSE_FILE) down --rmi all --volumes
 
 fclean: clean
 	sudo rm -rf $(DATA_DIR)/mariadb
