@@ -20,6 +20,7 @@ RUN openssl req -x509 -nodes \
     -subj "/C=JP/ST=Tokyo/L=Tokyo/O=42Tokyo/OU=Student/CN=${DOMAIN_NAME}"
 # 設定ファイルのコピー
 COPY conf/nginx.conf /etc/nginx/nginx.conf
+RUN sed -i "s/__DOMAIN_NAME__/${DOMAIN_NAME}/g" /etc/nginx/nginx.conf
 
 # NGINX が使用するポート（HTTPS）
 EXPOSE 443
