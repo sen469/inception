@@ -11,7 +11,7 @@ if [ ! -f "wp-load.php" ]; then
 fi
 
 # MariaDBの起動を待つ
-until mysqladmin ping -h mariadb -u "${MYSQL_USER}" -p"${MYSQL_PASSWORD}" --silent; do
+until mysqladmin ping -h mariadb --silent; do
     echo "Waiting for MariaDB..."
     sleep 2
 done
