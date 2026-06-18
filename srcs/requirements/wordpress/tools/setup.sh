@@ -11,6 +11,12 @@ if [ ! -f "wp-config.php" ]; then
     # WP本体のダウンロード
     wp core download --allow-root
 
+    # wp config create の前に以下を追加
+    until mysqladmin ping -h mariadb -u ${MYSQL_USER} -p${MYSQL_PASSWORD} --silent; do
+        echo "Waiting for MariaDB..."
+        sleep 2
+    done
+
     # wp-config.phpの作成 (MariaDBとの接続設定)
     # --dbhost=mariadb は docker-compose.yml のサービス名
     wp config create \

@@ -6,12 +6,12 @@
 #    By: ssawa <ssawa@student.42tokyo.jp>           +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/05/27 13:15:00 by ssawa             #+#    #+#              #
-#    Updated: 2026/05/27 13:15:01 by ssawa            ###   ########.fr        #
+#    Updated: 2026/06/18 10:15:05 by ssawa            ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
 COMPOSE_FILE	= srcs/docker-compose.yml
-DATA_DIR		= /home/ssawa/data
++DATA_DIR       = /home/$(shell whoami)/data
 
 all: up
 
@@ -27,8 +27,8 @@ clean: down
 	docker compose -f $(COMPOSE_FILE) down --rmi all --volumes
 
 fclean: clean
-	rm -rf $(DATA_DIR)/mariadb
-	rm -rf $(DATA_DIR)/wordpress
+	sudo rm -rf $(DATA_DIR)/mariadb
+	sudo rm -rf $(DATA_DIR)/wordpress
 	docker system prune -af
 
 re: fclean up

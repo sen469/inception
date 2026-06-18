@@ -17,8 +17,9 @@
   - `srcs/requirements/` 以下に `mariadb`, `wordpress`, `nginx` のディレクトリを作成。
   - 各ディレクトリに `Dockerfile`, `conf/`, `tools/` を配置。
 - [ ] **環境変数の設定 (`srcs/.env`)**
+  - `srcs/` 直下に `.env` ファイルを手動で作成する。
   - DB名、DBユーザー名、DBパスワード、WP管理者情報、WP一般ユーザー情報、ドメイン名を定義。
-  - **注意:** パスワード類は Docker secrets を使うことが推奨されているため、`secrets/` ディレクトリの利用も検討する。
+  - **重要**: `.env` は機密情報を含むため、`.gitignore` に追加して **Git リポジトリには絶対に含めない** ようにする。評価時には「なぜ Git に含めていないのか」をセキュリティの観点から説明できるようにしておく。
 - [ ] **ホスト側のデータ保存先作成**
   - `/home/<your_login>/data/mariadb` と `/home/<your_login>/data/wordpress` を作成する。
 

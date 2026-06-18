@@ -42,6 +42,8 @@ services:
   nginx:
     build:
       context: ./requirements/nginx
+      args:
+        DOMAIN_NAME: ${DOMAIN_NAME}
     image: nginx
     container_name: nginx
     restart: always
