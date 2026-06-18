@@ -11,14 +11,13 @@ if [ ! -f "wp-config.php" ]; then
     # WP本体のダウンロード
     wp core download --allow-root
 
-    # wp config create の前に以下を追加
+    # MariaDBの起動を待つ
     until mysqladmin ping -h mariadb -u ${MYSQL_USER} -p${MYSQL_PASSWORD} --silent; do
         echo "Waiting for MariaDB..."
         sleep 2
     done
 
-    # wp-config.phpの作成 (MariaDBとの接続設定)
-    # --dbhost=mariadb は docker-compose.yml のサービス名
+    # wp-config.phpの作成
     wp config create \
         --dbname=${MYSQL_DATABASE} \
         --dbuser=${MYSQL_USER} \
@@ -26,7 +25,7 @@ if [ ! -f "wp-config.php" ]; then
         --dbhost=mariadb \
         --allow-root
 
-    # WordPressのインストール (サイト設定と管理者作成)
+    # WordPressのインストール
     wp core install \
         --url=${DOMAIN_NAME} \
         --title="Inception WordPress" \
@@ -36,7 +35,7 @@ if [ ! -f "wp-config.php" ]; then
         --skip-email \
         --allow-root
 
-    # 一般ユーザーの作成 (課題要件: 2人目のユーザー)
+    # 一般ユーザーの作成
     wp user create \
         ${WP_USER} \
         ${WP_USER_EMAIL} \
@@ -52,4 +51,5 @@ mkdir -p /run/php
 
 # メインプロセスとして PHP-FPM をフォアグラウンドで起動
 echo "PHP-FPM starting..."
+# バージョンを自動判定して起動するか、Dockerfileで入れたバージョンを指定
 exec php-fpm8.4 -F
