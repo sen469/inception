@@ -1,6 +1,6 @@
 # Inception DEV_DOC
 
-この文書は、実装を説明し、レビューでの質問に耐えるための開発者向け資料です。ユーザー向けの操作手順は `USER_DOC.md`、課題本文は `docs/subject.ja.md` を参照してください。
+この文書は、実装を説明し、レビューでの質問に耐えるための開発者向け資料です。ユーザー向けの操作手順は `USER_DOC.md`、課題本文は `docs/subject.ja.md` を参照してください。`srcs/` 配下の実ファイルをコードブロック単位で読みたい場合は、`docs/inception_manual/source_walkthrough.ja.md` を参照してください。
 
 ## 1. 要件対応表
 
@@ -65,6 +65,10 @@ Git に入れてよい非秘密値のテンプレートです。実際の `srcs/
 ### `docs/inception_manual/secrets.example.md`
 
 ローカルで作るべき secret ファイル一覧です。実体の `secrets/*.txt` は Git から除外します。
+
+### `docs/inception_manual/source_walkthrough.ja.md`
+
+`srcs/` 配下の各ファイルを、実際のコード断片と設計意図を対応させて説明する注釈書です。この `DEV_DOC.md` が全体設計とレビュー観点をまとめる文書であるのに対し、`source_walkthrough.ja.md` は「この行はなぜ必要か」を確認するための資料です。
 
 ### `srcs/docker-compose.yml`
 

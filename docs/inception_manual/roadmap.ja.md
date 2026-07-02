@@ -45,6 +45,7 @@
 - `README.md`
 - `USER_DOC.md`
 - `DEV_DOC.md`
+- `docs/inception_manual/source_walkthrough.ja.md`
 
 追加の学習資料とレビュー防衛資料は `docs/` 配下に置きます。
 

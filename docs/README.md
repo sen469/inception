@@ -1,23 +1,22 @@
-# Documentation Index
+# ドキュメント索引
 
-This directory contains supplementary documents that are not required at the
-repository root for submission. Keep the repository root limited to the
-submission Markdown files required by the subject: `README.md`, `USER_DOC.md`,
-and `DEV_DOC.md`.
+このディレクトリには、提出ルート直下に置く必要のない補助資料をまとめています。
+リポジトリルートには、課題で要求される提出用 Markdown である `README.md`、
+`USER_DOC.md`、`DEV_DOC.md` だけを置きます。
 
-For evaluation, treat these files as the canonical project documents:
+評価時は、次のファイルをこのプロジェクトの正規資料として扱います。
 
 - `../README.md`
 - `../USER_DOC.md`
 - `../DEV_DOC.md`
 - `inception_manual/review_book.ja.md`
+- `inception_manual/source_walkthrough.ja.md`
 - `inception_manual/roadmap.ja.md`
 - `inception_manual/static_audit.ja.md`
 - `inception_manual/nginx_steps.ja.md`
 - `inception_manual/wordpress_steps.ja.md`
 - `inception_manual/mariadb_steps.ja.md`
 
-The `lectures/` and `services/` directories are study notes. They may include
-generic Docker examples or historical tutorial snippets that are not the final
-implementation. If there is any difference, the current source files under
-`srcs/` and the canonical documents listed above take precedence.
+`lectures/` と `services/` は学習メモです。汎用的な Docker 例や、現在の最終実装とは
+異なる過去の手順が含まれる場合があります。内容が食い違う場合は、`srcs/` 配下の
+現在のソースファイルと上記の正規資料を優先してください。
