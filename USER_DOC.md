@@ -110,7 +110,56 @@ https://<login>.42.fr/wp-admin
 
 自己署名証明書を使うため、ブラウザは警告を表示します。Inception では自己署名証明書で TLS を構成できていれば問題ありません。
 
-## 6. 正常性確認
+## 6. よくある起動失敗
+
+### `bind: address already in use`
+
+次のようなエラーは、ホスト側の `443` 番ポートを別プロセスが既に使っているという意味です。
+
+```text
+Error starting userland proxy: listen tcp4 0.0.0.0:443: bind: address already in use
+```
+
+今回のプロジェクトでは NGINX がホストの `443` 番を使います。そのため、ホストの nginx、Apache、別の Docker コンテナ、以前の Compose プロジェクトなどが `443` を使っていると起動できません。
+
+まず、このプロジェクトで途中まで作られたコンテナを止めます。
+
+```sh
+make down
+```
+
+次に、`443` 番を使っているプロセスを確認します。
+
+```sh
+sudo ss -ltnp 'sport = :443'
+```
+
+Docker コンテナが使っている可能性も確認します。
+
+```sh
+docker ps --format 'table {{.Names}}\t{{.Ports}}' | grep 443
+```
+
+ホストの nginx や Apache が原因なら、評価環境で不要な方を止めます。
+
+```sh
+sudo systemctl stop nginx
+sudo systemctl stop apache2
+```
+
+別の Docker コンテナが原因なら、そのコンテナを止めます。
+
+```sh
+docker stop <container_name>
+```
+
+`443` 番が空いたことを確認してから、再度起動します。
+
+```sh
+make
+```
+
+## 7. 正常性確認
 
 Compose のサービス状態:
 
@@ -153,7 +202,7 @@ docker exec mariadb ps -p 1 -o pid,comm,args
 
 期待値は、NGINX、PHP-FPM、MariaDB がそれぞれメインプロセスとして動いていることです。
 
-## 7. クレデンシャル管理
+## 8. クレデンシャル管理
 
 秘密情報の場所は `secrets/` です。Compose はこれらをコンテナ内の `/run/secrets/<name>` としてマウントします。
 

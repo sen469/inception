@@ -43,6 +43,7 @@
 提出必須としてルートに置く Markdown は次の3つです。
 
 - `README.md`
+- `README.ja.md`
 - `USER_DOC.md`
 - `DEV_DOC.md`
 - `docs/inception_manual/source_walkthrough.ja.md`

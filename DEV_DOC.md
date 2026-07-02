@@ -30,6 +30,7 @@
 .
 ├── Makefile
 ├── README.md
+├── README.ja.md
 ├── USER_DOC.md
 ├── DEV_DOC.md
 ├── srcs
@@ -50,11 +51,11 @@
 
 ### `Makefile`
 
-評価者が最初に使う入口です。`make` は `up` を実行します。`check-env` で `srcs/.env` と必須キー、`check-secrets` で4つの secret ファイルを検査します。`check-config` はその両方を実行し、欠けている場合は Docker を起動する前に失敗させます。
+評価者が最初に使う入口です。`make` は `up` を実行します。`check-env` で `srcs/.env` と必須キー、`check-secrets` で4つの secret ファイルを検査します。`check-config` はその両方を実行し、欠けている場合は Docker を起動する前に失敗させます。`check-port` はホストの `443` 番が既に使われていないかを確認し、NGINX 起動時の `bind: address already in use` を build 前に検出します。
 
 `COMPOSE` には `docker compose --env-file srcs/.env -f srcs/docker-compose.yml` を定義しています。Compose ファイルが `srcs/` にあるため、明示的に env file を渡して読み取り位置の曖昧さをなくしています。
 
-`DATA_DIR = /home/$(USER_LOGIN)/data` です。`up` は `mariadb` と `wordpress` の保存先ディレクトリを作成してから Compose を起動します。`down`, `logs`, `ps` も Compose の変数展開に `.env` を必要とするため、`check-env` を通してから実行します。`fclean` は `USER_LOGIN` を確認してから、このプロジェクトのデータディレクトリだけを削除します。
+`DATA_DIR = /home/$(USER_LOGIN)/data` です。`up` は設定、secrets、`443` 番ポートの空き状況を確認し、`mariadb` と `wordpress` の保存先ディレクトリを作成してから Compose を起動します。`down`, `logs`, `ps` も Compose の変数展開に `.env` を必要とするため、`check-env` を通してから実行します。`fclean` は `USER_LOGIN` を確認してから、このプロジェクトのデータディレクトリだけを削除します。
 
 Compose project 名は `-p` で固定していません。そのため、network や volume の実名は通常 `<project>_inception_network`, `<project>_mariadb_data`, `<project>_wordpress_data` になります。評価環境では `docker network ls` や `docker volume ls` で実名を確認してから inspect します。
 

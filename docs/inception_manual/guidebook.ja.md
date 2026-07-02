@@ -5,18 +5,21 @@
 読む順序は次の通りです。
 
 1. `README.md`
-   提出用READMEです。概要、起動手順、リソース、設計比較を日本語で記載しています。
+   課題指定に合わせた英語の提出用 README です。概要、起動手順、リソース、設計比較を記載しています。
 
-2. `USER_DOC.md`
+2. `README.ja.md`
+   `README.md` の日本語訳です。レビュー準備ではこちらを読んで内容を理解します。
+
+3. `USER_DOC.md`
    利用者・評価者向けの操作手順です。起動、停止、アクセス方法、クレデンシャル管理、正常性確認を説明しています。
 
-3. `DEV_DOC.md`
+4. `DEV_DOC.md`
    開発者向けの実装説明です。各ファイルの責務、Compose、Dockerfile、entrypoint、永続化、確認コマンドを説明しています。
 
-4. `docs/inception_manual/source_walkthrough.ja.md`
+5. `docs/inception_manual/source_walkthrough.ja.md`
    `srcs/` 配下の実ファイルをコード断片ごとに追い、なぜその書き方なのかを説明する注釈書です。
 
-5. `docs/inception_manual/review_book.ja.md`
+6. `docs/inception_manual/review_book.ja.md`
    厳しいレビューに備えた日本語の防衛資料です。設計意図、ファイル単位の説明、よく聞かれる質問への回答例をまとめています。
 
 旧版の説明は、Debian のバージョン、secrets の扱い、entrypoint の詳細などが現在の実装と食い違う可能性があるため、このファイルからは削除しました。最新の判断は上記4文書を正としてください。

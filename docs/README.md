@@ -2,11 +2,12 @@
 
 このディレクトリには、提出ルート直下に置く必要のない補助資料をまとめています。
 リポジトリルートには、課題で要求される提出用 Markdown である `README.md`、
-`USER_DOC.md`、`DEV_DOC.md` だけを置きます。
+`USER_DOC.md`、`DEV_DOC.md` と、日本語訳の `README.ja.md` を置きます。
 
 評価時は、次のファイルをこのプロジェクトの正規資料として扱います。
 
 - `../README.md`
+- `../README.ja.md`
 - `../USER_DOC.md`
 - `../DEV_DOC.md`
 - `inception_manual/review_book.ja.md`

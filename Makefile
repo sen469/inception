@@ -46,9 +46,21 @@ check-secrets:
 		test -s $$file || { echo "Missing or empty $$file. See DEV_DOC.md."; exit 1; }; \
 	done
 
+check-port:
+	@if command -v ss >/dev/null 2>&1; then \
+		if ss -ltn | awk '{print $$4}' | grep -Eq '(^|:|\])443$$'; then \
+			echo "Port 443 is already in use on the host."; \
+			echo "Find the process with: sudo ss -ltnp 'sport = :443'"; \
+			echo "Stop the conflicting service, then run make again."; \
+			exit 1; \
+		fi; \
+	else \
+		echo "Warning: ss command not found; skipping port 443 preflight check."; \
+	fi
+
 check-config: check-env check-secrets
 
-up: check-config
+up: check-config check-port
 	mkdir -p $(DATA_DIR)/mariadb
 	mkdir -p $(DATA_DIR)/wordpress
 	USER_LOGIN=$(USER_LOGIN) $(COMPOSE) up -d --build
@@ -74,4 +86,4 @@ ps: check-env
 config: check-config
 	USER_LOGIN=$(USER_LOGIN) $(COMPOSE) config
 
-.PHONY: all check-env check-secrets check-config up down clean fclean re logs ps config
+.PHONY: all check-env check-secrets check-port check-config up down clean fclean re logs ps config
