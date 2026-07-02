@@ -27,7 +27,8 @@ srcs/
     │   └── tools/init.sh
     ├── nginx
     │   ├── Dockerfile
-    │   └── conf/nginx.conf
+    │   ├── conf/nginx.conf
+    │   └── tools/entrypoint.sh
     └── wordpress
         ├── Dockerfile
         ├── conf/www.conf

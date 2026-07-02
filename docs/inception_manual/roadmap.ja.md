@@ -27,7 +27,8 @@
 
 ## 4. NGINX フェーズ
 
-- `srcs/requirements/nginx/Dockerfile` は `nginx` と `openssl` を入れ、自己署名証明書を作る。
+- `srcs/requirements/nginx/Dockerfile` は `nginx`, `openssl`, `netcat-openbsd` を入れ、自己署名証明書を作る。
+- `srcs/requirements/nginx/tools/entrypoint.sh` は `wordpress:9000` が接続可能になるまで待ち、起動直後の一時的な 502 を抑える。
 - `nginx.conf` は `listen 443 ssl;` と `ssl_protocols TLSv1.2 TLSv1.3;` を設定する。
 - `location ~ \.php$` は `fastcgi_pass wordpress:9000;` で PHP-FPM に渡す。
 - `ports:` は NGINX の `443:443` だけにする。

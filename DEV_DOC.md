@@ -95,15 +95,19 @@ volumes:
 
 ### `srcs/requirements/nginx/Dockerfile`
 
-`debian:bookworm` をベースに、`nginx` と `openssl` を入れます。ビルド時引数 `DOMAIN_NAME` を使って自己署名証明書を生成し、`nginx.conf` 内の `__DOMAIN_NAME__` を置換します。
+`debian:bookworm` をベースに、`nginx`, `openssl`, `netcat-openbsd` を入れます。ビルド時引数 `DOMAIN_NAME` を使って自己署名証明書を生成し、`nginx.conf` 内の `__DOMAIN_NAME__` を置換します。`netcat-openbsd` は entrypoint が `wordpress:9000` の TCP 接続可能状態を確認するために使います。
 
-最後は次のコマンドです。
+最後は次の entrypoint です。
 
 ```dockerfile
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 ```
 
-NGINX をフォアグラウンドで動かすため、コンテナがメインプロセスを持ったまま動き続けます。`tail -f` のような維持ハックではありません。
+`entrypoint.sh` は `wordpress:9000` が開くまで最大120秒待ち、それから `exec nginx -g "daemon off;"` を実行します。これにより、`make up` 直後に NGINX が PHP-FPM 準備前の WordPress へ接続して一時的な `502 Bad Gateway` を返す状況を減らします。最後は `exec` で NGINX をフォアグラウンド起動するため、`tail -f` のような維持ハックではありません。
+
+### `srcs/requirements/nginx/tools/entrypoint.sh`
+
+NGINX の起動前待機スクリプトです。`WORDPRESS_HOST` と `WORDPRESS_PORT` があればそれを使い、未設定なら `wordpress:9000` を待ちます。Compose の `depends_on` はコンテナ起動順だけを保証し、PHP-FPM が実際に listen しているかまでは保証しません。そのため NGINX 側で TCP 接続可能性を確認してから起動します。
 
 ### `srcs/requirements/nginx/conf/nginx.conf`
 
@@ -189,7 +193,7 @@ NGINX は TLS を終端し、PHP-FPM へ `HTTPS on` を渡します。WordPress 
 
 | Compose service | Image | Container | Dockerfile | Main process | External port |
 | --- | --- | --- | --- | --- | --- |
-| `nginx` | `nginx` | `nginx` | `srcs/requirements/nginx/Dockerfile` | `nginx -g "daemon off;"` | `443:443` |
+| `nginx` | `nginx` | `nginx` | `srcs/requirements/nginx/Dockerfile` | `entrypoint.sh` -> `nginx -g "daemon off;"` | `443:443` |
 | `wordpress` | `wordpress` | `wordpress` | `srcs/requirements/wordpress/Dockerfile` | `php-fpm -F` | none |
 | `mariadb` | `mariadb` | `mariadb` | `srcs/requirements/mariadb/Dockerfile` | `mysqld --user=mysql` | none |
 

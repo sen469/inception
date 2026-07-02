@@ -1,8 +1,10 @@
 # ベースイメージの指定
 FROM debian:bookworm
 
-# NGINX と OpenSSL のインストール
+# NGINX、OpenSSL、起動待ちに必要なツールのインストール
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    netcat-openbsd \
     nginx \
     openssl \
     && rm -rf /var/lib/apt/lists/*
@@ -24,9 +26,12 @@ RUN openssl req -x509 -nodes \
 COPY conf/nginx.conf /etc/nginx/nginx.conf
 RUN sed -i "s/__DOMAIN_NAME__/${DOMAIN_NAME}/g" /etc/nginx/nginx.conf
 
+# WordPress/PHP-FPM の準備完了を待ってから NGINX を起動する
+COPY tools/entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 # NGINX が使用するポート（HTTPS）
 EXPOSE 443
 
-# NGINX をフォアグラウンドで起動（PID 1 を維持するため）
-# daemon off; を指定しないとコンテナがすぐに終了してしまいます
-CMD ["nginx", "-g", "daemon off;"]
+# NGINX をメインプロセスとしてフォアグラウンドで起動する
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

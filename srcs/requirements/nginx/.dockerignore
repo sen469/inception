@@ -2,3 +2,5 @@
 !Dockerfile
 !conf
 !conf/**
+!tools
+!tools/**

@@ -200,6 +200,8 @@ NGINX:
 !Dockerfile
 !conf
 !conf/**
+!tools
+!tools/**
 ```
 
 MariaDB / WordPress:
@@ -215,7 +217,7 @@ MariaDB / WordPress:
 
 最初の `*` は、ビルドコンテキストに全ファイルを送らないという意味です。その後の `!` で、ビルドに必要な Dockerfile、設定ファイル、entrypoint だけを許可します。
 
-これにより、不要なファイルや誤って置いた秘密情報がイメージのビルドコンテキストに入るリスクを下げます。NGINX は entrypoint script を持たないため `tools/` を許可していません。MariaDB と WordPress は起動スクリプトをコピーするため `tools/` を許可しています。
+これにより、不要なファイルや誤って置いた秘密情報がイメージのビルドコンテキストに入るリスクを下げます。3サービスとも起動スクリプトや設定ファイルなど、ビルドに必要なファイルだけを許可しています。
 
 ## 4. `srcs/requirements/nginx/Dockerfile`
 
@@ -227,12 +229,14 @@ FROM debian:bookworm
 
 ```dockerfile
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    netcat-openbsd \
     nginx \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 ```
 
-NGINX 本体と、自己署名証明書を作るための OpenSSL だけを入れます。`--no-install-recommends` は不要な推奨パッケージを減らすためです。`/var/lib/apt/lists/*` を消すのは、apt のインデックスをイメージに残さないためです。
+NGINX 本体、自己署名証明書を作るための OpenSSL、起動待ち script 用の Bash、TCP 接続確認用の `netcat-openbsd` を入れます。`--no-install-recommends` は不要な推奨パッケージを減らすためです。`/var/lib/apt/lists/*` を消すのは、apt のインデックスをイメージに残さないためです。
 
 ```dockerfile
 ARG DOMAIN_NAME=ssawa.42.fr
@@ -254,13 +258,49 @@ RUN sed -i "s/__DOMAIN_NAME__/${DOMAIN_NAME}/g" /etc/nginx/nginx.conf
 設定ファイル内の `__DOMAIN_NAME__` をビルド時引数で置換します。テンプレート化することで、設定ファイルをログイン名固定にしません。
 
 ```dockerfile
+COPY tools/entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
 EXPOSE 443
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 ```
 
-`EXPOSE` はドキュメント的な宣言です。実際の公開は Compose の `ports:` が行います。`daemon off;` は NGINX をフォアグラウンドで動かす指定です。コンテナを生かすための `tail -f` ではなく、NGINX 本体が PID 1 になります。
+entrypoint は `wordpress:9000` が接続可能になるまで待ってから NGINX を起動します。`EXPOSE` はドキュメント的な宣言です。実際の公開は Compose の `ports:` が行います。
 
-## 5. `srcs/requirements/nginx/conf/nginx.conf`
+## 5. `srcs/requirements/nginx/tools/entrypoint.sh`
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+host="${WORDPRESS_HOST:-wordpress}"
+port="${WORDPRESS_PORT:-9000}"
+attempts=0
+max_attempts=60
+```
+
+接続先は既定で `wordpress:9000` です。環境変数で上書きできるようにしているため、将来サービス名やポートを変えた場合にも script の編集なしで対応できます。
+
+```bash
+until nc -z "${host}" "${port}" >/dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    if [ "${attempts}" -ge "${max_attempts}" ]; then
+        echo "Error: ${host}:${port} did not become reachable within 120 seconds." >&2
+        exit 1
+    fi
+    echo "Waiting for ${host}:${port}..."
+    sleep 2
+done
+```
+
+`nc -z` はデータを送らずに TCP 接続できるかだけを確認します。Compose の `depends_on` は起動順だけを保証し、PHP-FPM が listen 済みかは保証しません。そのため、NGINX が先に起動して一時的な 502 を返すことを避けるためにここで待ちます。最大120秒で失敗させ、無限待機にはしません。
+
+```bash
+exec nginx -g "daemon off;"
+```
+
+最後は `exec` で NGINX をフォアグラウンド起動します。shell を NGINX に置き換えるため、コンテナの PID 1 は最終的に NGINX になります。`tail -f` のような維持ハックではありません。
+
+## 6. `srcs/requirements/nginx/conf/nginx.conf`
 
 ```nginx
 events {
@@ -752,6 +792,7 @@ Debian の PHP-FPM バイナリ名は環境により `php-fpm` または `php-fp
 | `nginx/.dockerignore` | NGINX ビルドに必要なファイルだけを context に入れる。 |
 | `nginx/Dockerfile` | Debian から NGINX と自己署名 TLS 証明書を持つ入口イメージを作る。 |
 | `nginx/conf/nginx.conf` | 443/TLS と WordPress PHP-FPM への FastCGI 転送を定義する。 |
+| `nginx/tools/entrypoint.sh` | `wordpress:9000` の準備完了を待ち、最後に NGINX を PID 1 にする。 |
 | `mariadb/.dockerignore` | MariaDB ビルドに必要な設定と entrypoint だけを context に入れる。 |
 | `mariadb/Dockerfile` | Debian から MariaDB サーバーと初期化 entrypoint を持つ DB イメージを作る。 |
 | `mariadb/conf/50-server.cnf` | WordPress コンテナから DB 接続できるよう MariaDB の待受を設定する。 |
