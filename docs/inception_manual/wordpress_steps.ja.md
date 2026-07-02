@@ -1,209 +1,82 @@
-# WordPress + PHP-FPM 構築・完全手順書
+# WordPress + PHP-FPM 構築・解説
 
-この手順書に従えば、WordPressコンテナをプロジェクト要件（Mandatory）を満たした状態で完成させることができます。
-
----
-
-## 1. 構成図とディレクトリ準備
-
-まず、以下の構造になっているか確認してください。
+対象ファイル:
 
 ```text
 srcs/requirements/wordpress/
 ├── Dockerfile
-├── conf/
-│   └── www.conf
-└── tools/
-    └── setup.sh
+├── .dockerignore
+├── conf/www.conf
+└── tools/setup.sh
 ```
 
----
+## 1. 役割
 
-## 2. PHP-FPM 設定の準備 (`conf/www.conf`)
+WordPress コンテナは PHP-FPM と WordPress だけを担当します。NGINX は含めません。NGINX から `wordpress:9000` に届いた FastCGI リクエストを PHP-FPM が処理し、必要に応じて MariaDB に接続します。
 
-デフォルトではUNIXソケット（コンテナ内限定）で待機しているため、ネットワーク経由（NGINXコンテナから）の要求を受け取れるように変更します。
+## 2. Dockerfile
 
-1.  `/etc/php/<version>/fpm/pool.d/www.conf` の内容をベースにします。
-2.  以下の箇所を必ず修正してください。
+`debian:bookworm` をベースに、次をインストールします。
+
+- `php-fpm`
+- `php-cli`
+- `php-mysqli`
+- `mariadb-client`
+- `curl`
+- `ca-certificates`
+- `openssl`
+
+WP-CLI は公式の Phar を `curl -fsSL` で取得し、`/usr/local/bin/wp` に置きます。WP-CLI は PHP CLI で動くため、`php-cli` を明示的に入れます。ビルド時に WordPress 本体を `/usr/src/wordpress` へ取得し、初回起動時はそこから永続ボリューム `/var/www/html` へコピーします。PHP-FPM の設定パスは PHP minor version に依存するため、Dockerfile 内で `/etc/php/*/fpm/pool.d` を探して `www.conf` を配置します。設定ディレクトリが見つからない場合は、そのまま曖昧に進まずビルドを失敗させます。
+
+## 3. `www.conf`
+
+重要な設定:
 
 ```ini
 [www]
 user = www-data
 group = www-data
-
-; 変更前: listen = /run/php/php8.4-fpm.sock
-; 変更後: ポート9000で全てのホストからの要求を待機
-listen = 9000
-
-; プロセスの管理設定（任意）
-pm = dynamic
-pm.max_children = 5
-pm.start_servers = 2
-pm.min_spare_servers = 1
-pm.max_spare_servers = 3
+listen = 0.0.0.0:9000
+clear_env = no
 ```
 
----
+`listen = 0.0.0.0:9000` により、別コンテナの NGINX から FastCGI 接続を受けられます。ホストへ `9000` を公開しているわけではありません。
 
-## 3. 自動セットアップスクリプトの作成 (`tools/setup.sh`)
+## 4. `setup.sh`
 
-WP-CLIを使って、ブラウザ操作なしでWordPressをインストール・設定します。
+entrypoint の責務は次です。
 
-```bash
-#!/bin/bash
-set -e
+1. 必須環境変数を検査する。
+2. `MYSQL_PASSWORD_FILE`, `WP_ADMIN_PASSWORD_FILE`, `WP_USER_PASSWORD_FILE` から secrets を読む。
+3. 管理者ユーザー名に `admin` が含まれていないか検査する。
+4. WordPress 本体がなければ `/usr/src/wordpress` から `/var/www/html` へコピーする。
+5. MariaDB が応答するまで `mysqladmin ping -h mariadb` で最大120秒待つ。
+6. `wp-config.php` がなければ `wp config create --skip-check --skip-salts` で作り、認証キーとsaltを `openssl rand` でローカル生成する。既存 `wp-config.php` がある場合はログインセッションを壊さないよう再生成しない。
+7. `FORCE_SSL_ADMIN`, `WP_HOME`, `WP_SITEURL` を `https://<domain>` に揃える。
+8. 未インストールなら `wp core install` する。
+9. 一般ユーザーがいなければ `wp user create` する。
+10. 最後に PHP-FPM を `exec ... -F` で起動する。
 
-# WordPressの展開先ディレクトリへ移動
-cd /var/www/html
+`depends_on` は起動順だけを保証し、DB が接続可能かまでは保証しません。そのため `mysqladmin ping` が必要です。ただし無限には待たず、最大120秒で失敗させます。
 
-# WordPressが未インストールの場合のみダウンロードとインストールを実行
-if [ ! -f "wp-config.php" ]; then
-    echo "WordPress downloading and installing..."
+HTTPS については、NGINX が PHP-FPM に `HTTPS on` を渡し、WordPress 側は `wp-config.php` に `FORCE_SSL_ADMIN`, `WP_HOME`, `WP_SITEURL` を設定します。これにより、管理画面とサイトURLを HTTPS 前提にできます。
 
-    # WP本体のダウンロード
-    wp core download --allow-root
+## 5. secrets
 
-    # wp-config.phpの作成 (MariaDBとの接続設定)
-    # --dbhost=mariadb は docker-compose.yml のサービス名
-    wp config create \
-        --dbname=${MYSQL_DATABASE} \
-        --dbuser=${MYSQL_USER} \
-        --dbpass=${MYSQL_PASSWORD} \
-        --dbhost=mariadb \
-        --allow-root
-
-    # WordPressのインストール (サイト設定と管理者作成)
-    wp core install \
-        --url=${DOMAIN_NAME} \
-        --title="Inception WordPress" \
-        --admin_user=${WP_ADMIN_USER} \
-        --admin_password=${WP_ADMIN_PASSWORD} \
-        --admin_email=${WP_ADMIN_EMAIL} \
-        --skip-email \
-        --allow-root
-
-    # 一般ユーザーの作成 (課題要件: 2人目のユーザー)
-    wp user create \
-        ${WP_USER} \
-        ${WP_USER_EMAIL} \
-        --user_pass=${WP_USER_PASSWORD} \
-        --role=author \
-        --allow-root
-
-    echo "WordPress setup completed."
-fi
-
-# PHP-FPMの実行用ディレクトリ作成（エラー回避）
-mkdir -p /run/php
-
-# メインプロセスとして PHP-FPM をフォアグラウンドで起動
-echo "PHP-FPM starting..."
-exec php-fpm8.4 -F
-```
-*(※ `php-fpm8.4` の部分は使用するDebian/PHPのバージョンに合わせて調整してください。例: trixieなら8.4、bookwormなら8.2など)*
-
----
-
-## 4. Dockerfile の作成
-
-```dockerfile
-# ベースイメージの指定
-FROM debian:trixie
-
-# 必要なパッケージのインストール
-# php-fpm, php-mysqli (DB接続用), curl (WP-CLIダウンロード用), mariadb-client (DB起動待ち用)
-RUN apt-get update && apt-get install -y \
-    php-fpm \
-    php-mysqli \
-    curl \
-    mariadb-client \
-    && rm -rf /var/lib/apt/lists/*
-
-# WP-CLI のインストール
-RUN curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
-    && chmod +x wp-cli.phar \
-    && mv wp-cli.phar /usr/local/bin/wp
-
-# PHP-FPM 設定ファイルのコピー
-COPY conf/www.conf /etc/php/8.4/fpm/pool.d/www.conf
-
-# WordPress ソースコードの保存先ディレクトリ
-RUN mkdir -p /var/www/html && chown -R www-data:www-data /var/www/html
-
-# セットアップスクリプトのコピー
-COPY tools/setup.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/setup.sh
-
-# 作業ディレクトリ
-WORKDIR /var/www/html
-
-# ポート9000
-EXPOSE 9000
-
-# エントリポイント
-ENTRYPOINT ["/usr/local/bin/setup.sh"]
-```
-
----
-
-## 5. Docker Compose での設定 (`srcs/docker-compose.yml`)
+パスワードは `.env` ではなく Compose secrets から読みます。
 
 ```yaml
-services:
-  wordpress:
-    build:
-      context: ./requirements/wordpress
-    image: wordpress
-    container_name: wordpress
-    restart: always
-    # MariaDBが起動してからWPを立ち上げる
-    depends_on:
-      - mariadb
-    environment:
-      DOMAIN_NAME: ${DOMAIN_NAME}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      WP_ADMIN_USER: ${WP_ADMIN_USER}
-      WP_ADMIN_PASSWORD: ${WP_ADMIN_PASSWORD}
-      WP_ADMIN_EMAIL: ${WP_ADMIN_EMAIL}
-      WP_USER: ${WP_USER}
-      WP_USER_PASSWORD: ${WP_USER_PASSWORD}
-      WP_USER_EMAIL: ${WP_USER_EMAIL}
-    volumes:
-      - wordpress_data:/var/www/html
-    networks:
-      - inception_network
-
-volumes:
-  wordpress_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /home/${USER_LOGIN}/data/wordpress
+MYSQL_PASSWORD_FILE: /run/secrets/db_password
+WP_ADMIN_PASSWORD_FILE: /run/secrets/wp_admin_password
+WP_USER_PASSWORD_FILE: /run/secrets/wp_user_password
 ```
 
----
+スクリプト内の `read_secret` は `_FILE` 変数が指すファイルを読み、末尾改行を取り除いて実際の値として使います。
 
-## 6. 動作確認・テスト
+## 6. 冪等性
 
-1.  `make` で全コンテナを起動。
-2.  以下のコマンドでWordPressコンテナに入り、ファイルが生成されているか確認。
-    ```bash
-    docker exec -it wordpress ls -la /var/www/html
-    ```
-3.  MariaDBとの接続テスト：
-    ```bash
-    docker exec -it wordpress wp db check --allow-root
-    ```
-4.  ユーザー一覧の確認：
-    ```bash
-    docker exec -it wordpress wp user list --allow-root
-    ```
+WordPress 本体、`wp-config.php`、DBインストール状態、一般ユーザーの存在をそれぞれ確認してから作成します。これにより、コンテナ再起動時にインストール処理が二重実行されることを避けます。
 
----
+## 7. レビューでの説明
 
-### 注意事項
-- **ボリュームの共有**: WordPressのソースコードが置かれる `/var/www/html` は、**NGINXコンテナとも共有する**必要があります（NGINXが静的ファイルを読み込むため）。Docker Composeの `nginx` サービス側にも同じボリュームをマウントしてください。
-- **PHPバージョンの不一致**: DebianのバージョンによってPHPのバージョンが異なります。Dockerfile内のパス（`/etc/php/X.X/...`）やバイナリ名（`php-fpmX.X`）が一致しているか必ず確認してください。
+WordPress コンテナは HTTP を直接公開しません。PHP-FPM が内部ネットワークの `9000` で待ち受け、NGINX だけが外部入口になります。DB接続先は IP ではなく Compose サービス名 `mariadb` です。

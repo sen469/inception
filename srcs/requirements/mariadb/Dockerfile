@@ -1,8 +1,8 @@
-# ベースイメージの指定 (Debian trixie 等)
-FROM debian:trixie
+# ベースイメージの指定
+FROM debian:bookworm
 
 # パッケージの更新と MariaDB のインストール
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     mariadb-server \
     mariadb-client \
     && rm -rf /var/lib/apt/lists/*

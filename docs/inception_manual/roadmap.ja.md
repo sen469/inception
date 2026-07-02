@@ -1,116 +1,59 @@
 # Inception プロジェクト・ロードマップ
 
-このドキュメントは、42の課題「Inception」をスタートからゴールまで進めるための手順書です。
-ボーナスパートを除いた、**Mandatory（必須パート）**を確実にクリアすることを目的に構成されています。
+このロードマップは、現在の実装を基準に Mandatory を説明するための進行表です。古い `.env` パスワード直書き方式や `debian:trixie` 前提ではなく、`debian:bookworm` と Compose secrets を使う現在の構成に合わせています。
 
----
+## 1. 準備フェーズ
 
-## 1. 準備フェーズ：インフラと共通設定
+- VM に Docker と Docker Compose を用意する。
+- `/etc/hosts` に `<login>.42.fr` を登録する。
+- `srcs/.env.example` を `srcs/.env` にコピーし、ログイン名、ドメイン名、DB名、ユーザー名、メールアドレスを設定する。
+- `secrets/` に4つの secret ファイルを作る。
+- `/home/<login>/data/mariadb` と `/home/<login>/data/wordpress` は `make up` が作成する。
 
-まずは土台となる環境と共通設定を整えます。
+## 2. MariaDB フェーズ
 
-- [ ] **仮想マシンの準備**
-  - Debian または Alpine の VM を用意し、Docker と Docker Compose をインストールする。
-- [ ] **ドメイン設定**
-  - VM の `/etc/hosts` に `127.0.0.1 <your_login>.42.fr` を追加する。
-- [ ] **ディレクトリ構造の整備**
-  - `srcs/requirements/` 以下に `mariadb`, `wordpress`, `nginx` のディレクトリを作成。
-  - 各ディレクトリに `Dockerfile`, `conf/`, `tools/` を配置。
-- [ ] **環境変数の設定 (`srcs/.env`)**
-  - `srcs/` 直下に `.env` ファイルを手動で作成する。
-  - DB名、DBユーザー名、DBパスワード、WP管理者情報、WP一般ユーザー情報、ドメイン名を定義。
-  - **重要**: `.env` は機密情報を含むため、`.gitignore` に追加して **Git リポジトリには絶対に含めない** ようにする。評価時には「なぜ Git に含めていないのか」をセキュリティの観点から説明できるようにしておく。
-- [ ] **ホスト側のデータ保存先作成**
-  - `/home/<your_login>/data/mariadb` と `/home/<your_login>/data/wordpress` を作成する。
+- `srcs/requirements/mariadb/Dockerfile` は `debian:bookworm` から MariaDB をビルドする。
+- `50-server.cnf` は `bind-address = 0.0.0.0` にして、WordPress コンテナからの TCP 接続を受ける。
+- `init.sh` は secrets を読み、初回だけ DB を初期化し、DB とユーザーを作成する。
+- 最後は `exec mysqld --user=mysql --datadir=/var/lib/mysql` で MariaDB を PID 1 にする。
 
----
+## 3. WordPress フェーズ
 
-## 2. データベースフェーズ：MariaDB
+- `srcs/requirements/wordpress/Dockerfile` は PHP-FPM、PHP CLI、mysqli、MariaDB client、curl、CA証明書、openssl、WP-CLI を入れる。
+- `www.conf` は `listen = 0.0.0.0:9000` にして NGINX からの FastCGI を受ける。
+- `setup.sh` は secrets を読み、MariaDB の応答を待ち、WordPress 本体、`wp-config.php`、管理者、一般ユーザーを作る。
+- 管理者ユーザー名に `admin` を含む場合は起動時に失敗させる。
+- 最後は PHP-FPM を `exec ... -F` でフォアグラウンド起動する。
 
-WordPress のデータを保存する基盤を作ります。
+## 4. NGINX フェーズ
 
-- [ ] **Dockerfile の作成**
-  - `debian:trixie` (または指定のバージョン) をベースにする。
-  - `mariadb-server` をインストール。
-- [ ] **設定ファイルの編集 (`50-server.cnf`)**
-  - `bind-address = 0.0.0.0` に変更し、外部接続を許可する。
-- [ ] **初期化スクリプト (`init.sh`) の作成**
-  - コンテナ起動時に以下の処理を行う。
-    - データベースの作成。
-    - 管理者ユーザーの作成。
-    - 一般ユーザーの作成。
-    - 権限の付与 (`FLUSH PRIVILEGES`)。
-  - `mysqld_safe` または `mysqld` をフォアグラウンドで実行（PID 1）。
+- `srcs/requirements/nginx/Dockerfile` は `nginx` と `openssl` を入れ、自己署名証明書を作る。
+- `nginx.conf` は `listen 443 ssl;` と `ssl_protocols TLSv1.2 TLSv1.3;` を設定する。
+- `location ~ \.php$` は `fastcgi_pass wordpress:9000;` で PHP-FPM に渡す。
+- `ports:` は NGINX の `443:443` だけにする。
 
----
+## 5. 統合フェーズ
 
-## 3. アプリケーションフェーズ：WordPress + PHP-FPM
+- `srcs/docker-compose.yml` は3サービス、2 named volumes、1 bridge network、4 secrets を定義する。
+- `mariadb_data` と `wordpress_data` は Docker named volume として定義し、local driver の保存先を `/home/${USER_LOGIN}/data/...` に向ける。
+- `Makefile` は `check-env` と `check-secrets` で `.env` の存在、必須キー、secrets の存在を確認してから起動する。
 
-Web アプリケーションの本体を設定します。
+## 6. ドキュメントフェーズ
 
-- [ ] **Dockerfile の作成**
-  - `php-fpm` と `mariadb-client`, `curl` などをインストール。
-  - `wp-cli` をダウンロードし、実行権限を付与して `/usr/local/bin/wp` に配置。
-- [ ] **PHP-FPM の設定 (`www.conf`)**
-  - `listen = 9000` に設定（ポート 9000 で NGINX からの要求を待機）。
-- [ ] **エントリーポイントスクリプト (`setup.sh`) の作成**
-  - WordPress が未インストールの場合に以下を実行。
-    - `wp core download`
-    - `wp config create` (DB接続情報の設定)
-    - `wp core install` (サイト名、管理者情報の設定)
-    - `wp user create` (一般ユーザーの作成)
-  - `php-fpm -F` をフォアグラウンドで実行。
+提出必須としてルートに置く Markdown は次の3つです。
 
----
+- `README.md`
+- `USER_DOC.md`
+- `DEV_DOC.md`
 
-## 4. サーバーフェーズ：NGINX
+追加の学習資料とレビュー防衛資料は `docs/` 配下に置きます。
 
-インフラへの唯一のエントリーポイントです。
+## 7. 静的チェック項目
 
-- [ ] **SSL 証明書の生成**
-  - `openssl` を使い、TLS v1.2/v1.3 用の自己署名証明書と秘密鍵を生成する。
-- [ ] **設定ファイルの作成 (`nginx.conf`)**
-  - ポート 443 で listen。
-  - `ssl_protocols TLSv1.2 TLSv1.3;` を指定。
-  - `fastcgi_pass wordpress:9000;` を含め、PHPのリクエストをWordPressコンテナに飛ばす設定。
-- [ ] **Dockerfile の完成**
-  - NGINXをインストールし、設定ファイルと証明書をコピー。
-  - `nginx -g "daemon off;"` で実行。
-
----
-
-## 5. 統合フェーズ：Docker Compose & Makefile
-
-すべてを連携させ、自動化します。
-
-- [ ] **`srcs/docker-compose.yml` の記述**
-  - `services`: `mariadb`, `wordpress`, `nginx` のビルドコンテキスト、環境変数、ボリューム、ネットワーク、依存関係 (`depends_on`) を設定。
-  - `volumes`: ネームドボリュームを定義し、ホストパスに紐付け。
-  - `networks`: 共通のネットワークを定義。
-- [ ] **Makefile の完成**
-  - `all`: データ用ディレクトリ作成 + `docker-compose up --build -d`。
-  - `down`: `docker-compose down`。
-  - `re`: `fclean` 実行後に `all`。
-  - `clean`: コンテナ停止。
-  - `fclean`: コンテナ、ボリューム、イメージ、ネットワークの全削除。
-
----
-
-## 6. 最終確認・ドキュメントフェーズ
-
-評価基準を満たしているか確認します。
-
-- [ ] **動作確認**
-  - `https://<your_login>.42.fr` にアクセスして WordPress が表示されるか。
-  - SSL証明書が有効か、TLS 1.2/1.3が使われているか。
-  - DBに2人のユーザーが正しく作成されているか。
-  - ボリュームを削除してもデータが永続化されているか。
-- [ ] **必須ドキュメントの作成**
-  - `README.md`
-  - `USER_DOC.md`
-  - `DEV_DOC.md`
-- [ ] **禁止事項のチェック**
-  - `latest` タグを使っていないか。
-  - Dockerfileにパスワードを直書きしていないか。
-  - `network: host` や `links:` を使っていないか。
-  - `tail -f` などのハックを使っていないか。
+- Dockerfile に `latest` がない。
+- Dockerfile と Compose に平文パスワードがない。
+- `ports:` は `nginx` の `443:443` のみ。
+- `network: host`, `links`, `--link` を使っていない。
+- entrypoint に `tail -f`, `sleep infinity`, `while true` がない。
+- `ssl_protocols TLSv1.2 TLSv1.3;` がある。
+- `srcs/.env` と `secrets/*.txt` は Git 管理外。

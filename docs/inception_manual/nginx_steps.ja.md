@@ -1,174 +1,94 @@
-# NGINX 構築・完全手順書
+# NGINX 構築・解説
 
-この手順書に従えば、NGINXコンテナをプロジェクト要件（Mandatory）を満たした状態で完成させることができます。
-
----
-
-## 1. 構成図とディレクトリ準備
-
-まず、以下の構造になっているか確認してください。
+対象ファイル:
 
 ```text
 srcs/requirements/nginx/
 ├── Dockerfile
-├── conf/
-│   └── nginx.conf
-└── tools/
-    └── (必要に応じてスクリプトを配置)
+├── .dockerignore
+└── conf/nginx.conf
 ```
 
----
+## 1. 役割
 
-## 2. NGINX 設定ファイルの作成 (`conf/nginx.conf`)
+NGINX はこのインフラの唯一の入口です。ホストに公開されるポートは `443` だけで、HTTP 80、WordPress 9000、MariaDB 3306 は公開しません。
 
-この設定ファイルが、HTTPS通信の受け口と WordPress への橋渡し（プロキシ）を行います。
+## 2. Dockerfile
 
-```nginx
-events {
-    # 同時接続数の設定（デフォルトでOK）
-    worker_connections 1024;
-}
-
-http {
-    # MIMEタイプの読み込み
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    server {
-        # ポート443(SSL)で待ち受ける
-        listen 443 ssl;
-        listen [::]:443 ssl;
-
-        # サーバー名（自分のログイン名.42.fr）
-        server_name ${DOMAIN_NAME};
-
-        # SSL証明書と秘密鍵のパス
-        ssl_certificate     /etc/nginx/ssl/inception.crt;
-        ssl_certificate_key /etc/nginx/ssl/inception.key;
-
-        # TLSプロトコルの制限（課題要件: TLSv1.2 または TLSv1.3 のみ）
-        ssl_protocols TLSv1.2 TLSv1.3;
-
-        # ドキュメントルートの設定（WordPressと共有するボリューム）
-        root /var/www/html;
-        index index.php index.html index.htm;
-
-        # 通常のファイルリクエストへの対応
-        location / {
-            try_files $uri $uri/ =404;
-        }
-
-        # PHPファイルリクエストへの対応（FastCGIプロキシ）
-        location ~ \.php$ {
-            # WordPressコンテナのポート9000へ転送
-            fastcgi_pass wordpress:9000;
-            include fastcgi_params;
-            # 実行するPHPファイルのフルパスを指定
-            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        }
-    }
-}
-```
-*(注: `server_name` に `${DOMAIN_NAME}` と書いていますが、NGINXの標準設定ファイルでは環境変数は使えません。Dockerfile内で `envsubst` を使って置換するか、自分のログイン名を直接書き込んでください。)*
-
----
-
-## 3. Dockerfile の作成
-
-Dockerfile内で `openssl` を使い、自己署名証明書を自動生成します。
+現在の実装は `debian:bookworm` を使います。`nginx` と `openssl` をインストールし、ビルド時引数 `DOMAIN_NAME` で自己署名証明書の Common Name を決めます。
 
 ```dockerfile
-# ベースイメージの指定
-FROM debian:trixie
+FROM debian:bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends nginx openssl
+```
 
-# NGINX と OpenSSL のインストール
-RUN apt-get update && apt-get install -y \
-    nginx \
-    openssl \
-    && rm -rf /var/lib/apt/lists/*
+証明書は `/etc/nginx/ssl/inception.crt`、秘密鍵は `/etc/nginx/ssl/inception.key` に作られます。最後は次で起動します。
 
-# SSL証明書の保存ディレクトリ作成
-RUN mkdir -p /etc/nginx/ssl
-
-# 自己署名証明書の生成
-# -nodes: 秘密鍵を暗号化しない（起動時にパスワード入力を求められないようにするため）
-# -subj: 対話形式を避け、一行で証明書情報を入力
-RUN openssl req -x509 -nodes \
-    -out /etc/nginx/ssl/inception.crt \
-    -keyout /etc/nginx/ssl/inception.key \
-    -subj "/C=JP/ST=Tokyo/L=Tokyo/O=42Tokyo/OU=Student/CN=ssawa.42.fr"
-
-# 設定ファイルのコピー
-COPY conf/nginx.conf /etc/nginx/nginx.conf
-
-# NGINX が使用するポート（HTTPS）
-EXPOSE 443
-
-# NGINX をフォアグラウンドで起動（PID 1 を維持するため）
-# daemon off; を指定しないとコンテナがすぐに終了してしまいます
+```dockerfile
 CMD ["nginx", "-g", "daemon off;"]
 ```
 
----
+`daemon off;` は NGINX をフォアグラウンドで動かすための正規設定です。`tail -f` のようなコンテナ維持ハックではありません。
 
-## 4. Docker Compose での設定 (`srcs/docker-compose.yml`)
+## 3. `nginx.conf`
 
-NGINXは、WordPressとファイルを共有するためにボリュームをマウントする必要があります。
+重要な設定は次です。
 
-```yaml
-services:
-  nginx:
-    build:
-      context: ./requirements/nginx
-    image: nginx
-    container_name: nginx
-    restart: always
-    # WordPressが起動してからNGINXを立ち上げる
-    depends_on:
-      - wordpress
-    # 外部（ホスト）にポート443を公開する唯一のサービス
-    ports:
-      - "443:443"
-    volumes:
-      - wordpress_data:/var/www/html
-    networks:
-      - inception_network
-
-# (networks と volumes の定義は mariadb/wordpress の手順書と同じ)
+```nginx
+listen 443 ssl;
+listen [::]:443 ssl;
+server_name __DOMAIN_NAME__;
+ssl_protocols TLSv1.2 TLSv1.3;
+root /var/www/html;
+index index.php index.html index.htm;
 ```
 
----
+`__DOMAIN_NAME__` は Dockerfile の `sed` で `DOMAIN_NAME` に置換されます。NGINX 設定ファイル内では通常のシェル環境変数展開は行われないため、ビルド時に明示的に置換します。
 
-## 5. 動作確認・テスト
+WordPress ルーティングは次で処理します。
 
-1.  `make` で全コンテナを起動。
-2.  **VM内またはMacのブラウザからアクセス**:
-    - `https://<login>.42.fr` にアクセス。
-    - 自己署名証明書のため「安全ではありません」と出ますが、「詳細」→「アクセスする」で進んでください。
-3.  **TLSバージョンの確認**:
-    - ターミナルから `curl` を使って確認できます。
-    ```bash
-    curl -I -v --tlsv1.2 https://<login>.42.fr --insecure
-    ```
-    - `TLSv1.2` または `TLSv1.3` で接続されていることを確認してください。
-4.  **証明書の中身を確認**:
-    ```bash
-    docker exec -it nginx openssl x509 -in /etc/nginx/ssl/inception.crt -text -noout
-    ```
+```nginx
+location / {
+    try_files $uri $uri/ /index.php?$args;
+}
+```
 
----
+静的ファイルがあれば NGINX が返し、なければ WordPress の `index.php` に渡します。
 
-## 6. よくあるエラー（502 Bad Gateway）の解決策
+PHP は NGINX が実行するのではなく、FastCGI で WordPress コンテナの PHP-FPM に渡します。
 
-ブラウザに `502 Bad Gateway` と表示された場合、NGINX は動いていますが、その後ろの WordPress と通信できていません。
+```nginx
+location ~ \.php$ {
+    try_files $uri =404;
+    fastcgi_pass wordpress:9000;
+    fastcgi_index index.php;
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    fastcgi_param HTTPS on;
+}
+```
 
-- **原因1**: WordPress コンテナの PHP-FPM が起動していない。
-- **原因2**: WordPress コンテナの `www.conf` で `listen = 9000` になっていない（UNIXソケットのまま）。
-- **原因3**: `docker-compose.yml` でコンテナ名が `wordpress` 以外になっている（NGINXはサービス名で名前解決します）。
-- **原因4**: 両方のコンテナにボリュームが正しくマウントされておらず、NGINX側でPHPファイルが見つからない。
+`wordpress` は Docker Compose のサービス名です。同じ user-defined bridge network 内ではサービス名で名前解決できます。
 
----
+隠しファイルは外部へ返しません。
 
-### 注意事項
-- **セキュリティ**: ポート 80 (HTTP) は開けないでください。要件により 443 (HTTPS) のみがエントリポイントです。
-- **設定ファイルの場所**: Debianのデフォルトでは `/etc/nginx/sites-available/default` を読み込むようになっています。`nginx.conf` で直接 `server` ブロックを書く場合は、既存のデフォルト設定と衝突しないように注意してください。
+```nginx
+location ~ /\. {
+    deny all;
+}
+```
+
+## 4. Compose上の接続
+
+`srcs/docker-compose.yml` では NGINX だけが `ports:` を持ちます。
+
+```yaml
+ports:
+  - "443:443"
+```
+
+WordPress ファイルを読む必要があるため、`wordpress_data:/var/www/html` を NGINX にもマウントします。
+
+## 5. レビューでの説明
+
+NGINX は TLS 終端とリクエスト転送だけを担当します。PHP 実行は WordPress コンテナの PHP-FPM、DB は MariaDB コンテナです。この分離により、外部入口を NGINX だけに限定できます。

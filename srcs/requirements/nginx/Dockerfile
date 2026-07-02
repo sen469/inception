@@ -1,8 +1,8 @@
 # ベースイメージの指定
-FROM debian:trixie
+FROM debian:bookworm
 
 # NGINX と OpenSSL のインストール
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     openssl \
     && rm -rf /var/lib/apt/lists/*
@@ -15,6 +15,8 @@ ARG DOMAIN_NAME=ssawa.42.fr
 # -nodes: 秘密鍵を暗号化しない（起動時にパスワード入力を求められないようにするため）
 # -subj: 対話形式を避け、一行で証明書情報を入力
 RUN openssl req -x509 -nodes \
+    -days 365 \
+    -newkey rsa:4096 \
     -out /etc/nginx/ssl/inception.crt \
     -keyout /etc/nginx/ssl/inception.key \
     -subj "/C=JP/ST=Tokyo/L=Tokyo/O=42Tokyo/OU=Student/CN=${DOMAIN_NAME}"
